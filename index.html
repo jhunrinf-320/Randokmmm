@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Five Little Hearts</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: linear-gradient(145deg, #dff6ff, #f8fcff);
+      color: #174e67;
+      font-family: system-ui, sans-serif;
+      text-align: center;
+    }
+
+    main { width: min(680px, 100%); }
+
+    h1 { margin: 0 0 6px; }
+    p { margin: 6px 0 14px; }
+
+    .game-wrap {
+      position: relative;
+      overflow: hidden;
+      border: 4px solid white;
+      border-radius: 22px;
+      box-shadow: 0 12px 35px #438bb533;
+      background: #91ddf5;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 390px;
+      touch-action: none;
+    }
+
+    #counter {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      padding: 7px 12px;
+      border-radius: 20px;
+      background: #ffffffdd;
+      font-weight: 700;
+    }
+
+    #surprise {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: #dff6fff0;
+    }
+
+    #surprise[hidden] { display: none; }
+
+    .card {
+      max-width: 470px;
+      padding: 25px;
+      border-radius: 20px;
+      background: white;
+      box-shadow: 0 8px 30px #438bb533;
+    }
+
+    .card h2 { margin-top: 0; color: #1687b1; }
+    .card p { line-height: 1.65; }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 16px;
+      background: #168fba;
+      color: white;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 54px);
+      gap: 7px;
+      justify-content: center;
+      margin-top: 14px;
+    }
+
+    .controls button { padding: 10px; font-size: 20px; }
+    .controls button:nth-child(1) { grid-column: 2; }
+    .controls button:nth-child(2) { grid-column: 1; grid-row: 2; }
+    .controls button:nth-child(3) { grid-column: 2; grid-row: 2; }
+    .controls button:nth-child(4) { grid-column: 3; grid-row: 2; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>💙 Five Little Hearts 💙</h1>
+    <p>Collect all 5 hearts for a little surprise!</p>
+
+    <div class="game-wrap">
+      <canvas id="game" aria-label="Game: collect five hearts"></canvas>
+      <div id="counter">Hearts: 0 / 5</div>
+
+      <div id="surprise" hidden>
+        <div class="card">
+          <h2>For Jozelle 💙</h2>
+          <p>
+            Hi Doc, thank you so much for making me feel comfortable and at ease
+            day by day. I'm genuinely grateful to have someone like you whom I
+            can talk to and share my thoughts with without feeling judged. I
+            truly appreciate your words, your understanding, and the little
+            things you do because they make a bigger difference than you
+            probably realize. I hope you know how much I value your presence.
+          </p>
+          <button id="replay">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls" aria-label="Touch controls">
+      <button data-dir="up" aria-label="Move up">↑</button>
+      <button data-dir="left" aria-label="Move left">←</button>
+      <button data-dir="down" aria-label="Move down">↓</button>
+      <button data-dir="right" aria-label="Move right">→</button>
+    </div>
+    <p><small>Move with arrow keys or WASD. On a phone, use the buttons.</small></p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const counter = document.getElementById("counter");
+    const surprise = document.getElementById("surprise");
+
+    const player = { x: 100, y: 100, radius: 17, speed: 230 };
+    const keys = new Set();
+    let hearts = [];
+    let collected = 0;
+    let lastTime = 0;
+    let won = false;
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      player.x = Math.min(player.x, rect.width - player.radius);
+      player.y = Math.min(player.y, rect.height - player.radius);
+    }
+
+    function addHeart() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      hearts.push({
+        x: 35 + Math.random() * Math.max(1, w - 70),
+        y: 45 + Math.random() * Math.max(1, h - 90),
+        radius: 13
+      });
+    }
+
+    function startGame() {
+      collected = 0;
+      won = false;
+      hearts = [];
+      player.x = canvas.clientWidth / 2;
+      player.y = canvas.clientHeight / 2;
+      counter.textContent = "Hearts: 0 / 5";
+      surprise.hidden = true;
+      for (let i = 0; i < 5; i++) addHeart();
+    }
+
+    function drawHeart(x, y, size, color) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(size / 18, size / 18);
+      ctx.beginPath();
+      ctx.moveTo(0, 15);
+      ctx.bezierCurveTo(-22, 0, -13, -15, 0, -7);
+      ctx.bezierCurveTo(13, -15, 22, 0, 0, 15);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function update(time) {
+      const dt = Math.min((time - lastTime) / 1000 || 0, 0.04);
+      lastTime = time;
+
+      if (!won) {
+        let dx = 0, dy = 0;
+        if (keys.has("ArrowLeft") || keys.has("a")) dx--;
+        if (keys.has("ArrowRight") || keys.has("d")) dx++;
+        if (keys.has("ArrowUp") || keys.has("w")) dy--;
+        if (keys.has("ArrowDown") || keys.has("s")) dy++;
+
+        const length = Math.hypot(dx, dy) || 1;
+        player.x += (dx / length) * player.speed * dt;
+        player.y += (dy / length) * player.speed * dt;
+        player.x = Math.max(player.radius, Math.min(canvas.clientWidth - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(canvas.clientHeight - player.radius, player.y));
+
+        hearts = hearts.filter(heart => {
+          if (Math.hypot(player.x - heart.x, player.y - heart.y) < player.radius + heart.radius) {
+            collected++;
+            counter.textContent = `Hearts: ${collected} / 5`;
+            if (collected === 5) {
+              won = true;
+              surprise.hidden = false;
+            }
+            return false;
+          }
+          return true;
+        });
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function draw() {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      // Soft clouds
+      ctx.fillStyle = "#ffffff55";
+      for (const [x, y, r] of [[70, 65, 24], [w - 85, 110, 30], [w * 0.55, h - 35, 22]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.arc(x + r, y + 5, r * 0.75, 0, Math.PI * 2);
+        ctx.arc(x - r, y + 8, r * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      hearts.forEach(heart => drawHeart(heart.x, heart.y, 20, "#168fba"));
+      drawHeart(player.x, player.y, 27, "#ff6b9b");
+    }
+
+    window.addEventListener("keydown", event => {
+      const key = event.key.toLowerCase();
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
+        event.preventDefault();
+      }
+      keys.add(key);
+    });
+
+    window.addEventListener("keyup", event => keys.delete(event.key.toLowerCase()));
+    window.addEventListener("blur", () => keys.clear());
+    window.addEventListener("resize", resizeCanvas);
+
+    document.querySelectorAll("[data-dir]").forEach(button => {
+      const directions = {
+        up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight"
+      };
+      const key = directions[button.dataset.dir];
+
+      button.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        keys.add(key);
+      });
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach(type =>
+        button.addEventListener(type, () => keys.delete(key))
+      );
+    });
+
+    document.getElementById("replay").addEventListener("click", startGame);
+
+    resizeCanvas();
+    startGame();
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>
